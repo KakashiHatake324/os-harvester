@@ -1,0 +1,30 @@
+{
+  "name": "os-harvester",
+  "version": "1.0.0",
+  "description": "Open sourced captcha harvester for fun",
+  "main": "src/app.ts",
+  "scripts": {
+    "build": "./node_modules/.bin/tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KakashiHatake324/os-harvester.git"
+  },
+  "keywords": [
+    "Captcha",
+    "harvester",
+    "open",
+    "source"
+  ],
+  "author": "Kage Solutions",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/KakashiHatake324/os-harvester/issues"
+  },
+  "homepage": "https://github.com/KakashiHatake324/os-harvester#readme",
+  "devDependencies": {
+    "@types/electron": "^1.6.10",
+    "typescript": "^4.8.4"
+  }
+}
