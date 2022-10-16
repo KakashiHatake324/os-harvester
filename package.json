@@ -25,6 +25,15 @@
   "homepage": "https://github.com/KakashiHatake324/os-harvester#readme",
   "devDependencies": {
     "@types/electron": "^1.6.10",
+    "@types/koa": "^2.13.5",
+    "@types/response-time": "^2.3.5",
+    "@types/workerpool": "^6.1.0",
     "typescript": "^4.8.4"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "koa": "^2.13.4",
+    "response-time": "^2.3.2",
+    "workerpool": "^6.2.1"
   }
 }
