@@ -1,3 +1,9 @@
+[b]INSTALLATION[b]
+navigate to the project's directory and input the following commands:
+- `npm install`
+- `npm run build`
+- `electron dist/app.js`
+
 example socket request:
 ```json
 {
