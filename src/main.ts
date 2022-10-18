@@ -1,14 +1,9 @@
 import { BrowserWindow, ipcMain } from "electron";
 import HavesterWindow, {
   HarvesterPool,
-  HarvesterRequest,
-  locateOpenHarvester,
   SolvedCaptchas,
 } from "./harvesters/Harvester";
-import express from "express";
-
-const port = 2000;
-const server = express();
+import { SocketServer, startNewServer } from "./server/Websockets";
 
 export default class Main {
   static mainWindow: BrowserWindow;
@@ -27,8 +22,9 @@ export default class Main {
 
   private static async onReady() {
     Main.mainWindow = new Main.BrowserWindow({ width: 800, height: 600 });
-    //Main.mainWindow
-    //    .loadURL('file://' + __dirname + '/index.html');
+
+    await startNewServer(2222);
+    SocketServer.startServer();
 
     HarvesterPool.push(
       new HavesterWindow({
@@ -73,22 +69,6 @@ export default class Main {
       harvester.openHarvester();
     });
 
-    /*
-    const solveCaptcha = await HarvesterPool[1].solveCapcha({
-      siteURL: "https://recaptcha-demo.appspot.com/recaptcha-v2-invisible.php",
-      siteKey: "6LcmDCcUAAAAAL5QmnMvDFnfPTP4iCUYRk2MwC0-",
-      taskId: "4rwef-wfefwef-w4fsdfji",
-      captchaTypes: {
-        V2: true,
-        Checkpoint: false,
-        V2Invisible: false,
-        V3: false,
-        V3Enterprise: false,
-      },
-    });
-
-    console.log(solveCaptcha);
-    */
     Main.mainWindow.on("closed", Main.onClose);
   }
 
@@ -107,62 +87,10 @@ export default class Main {
 ipcMain.on("sendCaptcha", function (_event, token, taskid) {
   console.log(`received token for ${taskid}`);
   SolvedCaptchas.set(taskid, token);
+  SocketServer.sendMessage({
+    action: "completed",
+    message: "completed a captcha",
+    solved: { Success: true, Token: token, Taskid: taskid },
+    openHarvesters: [],
+  });
 });
-
-server.get("/fetch", function (req: any, res: any) {
-  console.log("new request to the server");
-  try {
-    let captchaRequest: HarvesterRequest = {
-      siteURL: "",
-      siteKey: "",
-      taskId: "",
-      captchaTypes: {
-        V2: true,
-        Checkpoint: false,
-        V2Invisible: false,
-        V3: false,
-        V3Enterprise: false,
-      },
-    };
-    console.log(
-      `Received request for: ${req.query.siteurl},${req.query.sitekey},${req.query.taskid},${req.query.type}`
-    );
-    captchaRequest.siteKey = req.query.sitekey.toString();
-    captchaRequest.siteURL = req.query.siteurl.toString();
-    captchaRequest.taskId = req.query.taskid.toString();
-    switch (req.query.type.toString()) {
-      case "checkpoint":
-        captchaRequest.captchaTypes.Checkpoint = true;
-        break;
-      case "v2":
-        captchaRequest.captchaTypes.V2 = true;
-        break;
-      case "v2-invisible":
-        captchaRequest.captchaTypes.V2Invisible = true;
-        break;
-      case "v3":
-        captchaRequest.captchaTypes.V3 = true;
-        break;
-      case "v3-enterprise":
-        captchaRequest.captchaTypes.V3Enterprise = true;
-        break;
-      default:
-        return res.json({
-          success: false,
-          error: "no captcha type specified",
-        });
-    }
-    console.log(`will request captcha`);
-    locateOpenHarvester(captchaRequest).then(
-      (f) => {
-        return res.json(f);
-      }
-    );
-  } catch (e) {
-    console.log(`error solving captcha ${e}`);
-    return res.json({ success: false, error: e });
-  }
-});
-
-server.listen(port);
-

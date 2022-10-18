@@ -1,13 +1,14 @@
 import { BrowserWindow, net, session } from "electron";
 import { readFileSync } from "fs";
+import { SocketServer } from "../server/Websockets";
 export var HarvesterPool: HavesterWindow[] = [];
 export let SolvedCaptchas = new Map<string, string>();
 
 // Harvester class
 export default class HavesterWindow {
-  Information: HarvesterStruct;
-  harvesterWindow: BrowserWindow;
-  IsIntercepting: boolean;
+  public Information: HarvesterStruct;
+  private harvesterWindow: BrowserWindow;
+  private IsIntercepting: boolean;
 
   constructor(harvester: HarvesterStruct) {
     this.Information = harvester;
@@ -71,7 +72,7 @@ export default class HavesterWindow {
       } else if (task.captchaTypes.V3Enterprise) {
         captchaHTML = this.genV2InvisibleHTML(task.siteKey, task.taskId);
       } else {
-        return { Success: false, Token: "" };
+        return { Success: false, Token: "", Taskid: task.taskId };
       }
       console.log(`created the html`);
       this.IsIntercepting =
@@ -136,9 +137,9 @@ export default class HavesterWindow {
       );
       await this.reset();
       if (!token) {
-        return { Success: false, Token: token };
+        return { Success: false, Token: "", Taskid: task.taskId };
       } else {
-        return { Success: true, Token: token };
+        return null;
       }
     }
   }
@@ -150,6 +151,16 @@ export default class HavesterWindow {
   // Return if the harvester is closed
   inUse(): boolean {
     return this.Information.InUse;
+  }
+
+  // Return the harvester's session id
+  getSession(): string {
+    return this.Information.SessionID;
+  }
+
+  setUse(): string {
+    this.Information.InUse = true;
+    return this.Information.SessionID;
   }
 
   genV2HTML(key: string, taskId: string): Buffer {
@@ -291,6 +302,7 @@ export interface HarvesterRequest {
 // Response coming from the harvester
 export interface HarvesterResponse {
   Success: boolean;
+  Taskid: string;
   Token: string;
 }
 
@@ -299,15 +311,42 @@ export function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function locateOpenHarvester(
-  task: HarvesterRequest
-): Promise<HarvesterResponse> {
-  let res: HarvesterResponse;
+export async function solveCaptcha(request: HarvesterRequest) {
+  let harvester: HavesterWindow = await locateOpenHarvester();
+
+  while (harvester === null) {
+    harvester = await locateOpenHarvester();
+    await delay(500);
+  }
+  console.log(`Found an open harvester and will use it to solve..`);
+
+  useHarvester(request, harvester);
+}
+
+// Locate an open harvester, set it in use and return it
+export async function locateOpenHarvester(): Promise<HavesterWindow> {
   for await (const harvester of HarvesterPool) {
     if (!harvester.inUse()) {
-      res = await harvester.solveCapcha(task);
-      break;
+      harvester.setUse();
+      return harvester;
     }
   }
-  return res;
+  return null;
+}
+
+// Use the harvester returned by locateOpenHarvester()
+export async function useHarvester(
+  task: HarvesterRequest,
+  harvester: HavesterWindow
+) {
+  var res = await harvester.solveCapcha(task);
+  if (!res.Success) {
+    SocketServer.sendMessage({
+      action: "failed",
+      message: "could not solve captcha",
+      solved: res,
+      openHarvesters: [],
+    });
+  }
+  console.log(res);
 }
