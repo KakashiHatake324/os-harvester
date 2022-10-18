@@ -1,3 +1,6 @@
+`TODO BEFORE INSTALLATION`
+- Search `#TODO` in the VSCode search bar and change the attributes.
+
 ``INSTALLATION``
 navigate to the project's directory and input the following commands:
 - `npm install`

@@ -5,6 +5,9 @@ import HavesterWindow, {
 } from "./harvesters/Harvester";
 import { SocketServer, startNewServer } from "./server/Websockets";
 
+// #TODO change the port number of the websocket to your desired port
+let port: number = 2222;
+
 export default class Main {
   static mainWindow: BrowserWindow;
   static application: Electron.App;
@@ -23,8 +26,9 @@ export default class Main {
   private static async onReady() {
     Main.mainWindow = new Main.BrowserWindow({ width: 800, height: 600 });
 
-    await startNewServer(2222);
+    await startNewServer(port);
     SocketServer.startServer();
+
 
     HarvesterPool.push(
       new HavesterWindow({
