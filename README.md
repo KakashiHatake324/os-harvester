@@ -1,4 +1,4 @@
-[b]INSTALLATION[b]
+``INSTALLATION``
 navigate to the project's directory and input the following commands:
 - `npm install`
 - `npm run build`
