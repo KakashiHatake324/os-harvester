@@ -2,8 +2,8 @@ import { BrowserWindow, ipcMain } from "electron";
 import HavesterWindow, {
   HarvesterPool,
   SolvedCaptchas,
-} from "./harvesters/Harvester";
-import { SocketServer, startNewServer } from "./server/Websockets";
+} from "./backend/harvesters/Harvester";
+import { SocketServer, startNewServer } from "./backend/server/Websockets";
 
 // #TODO change the port number of the websocket to your desired port
 let port: number = 2222;
