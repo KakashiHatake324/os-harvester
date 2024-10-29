@@ -12,6 +12,7 @@ export default class Main {
   static mainWindow: BrowserWindow;
   static application: Electron.App;
   static BrowserWindow;
+
   private static onWindowAllClosed() {
     if (process.platform !== "darwin") {
       Main.application.quit();
@@ -24,11 +25,16 @@ export default class Main {
   }
 
   private static async onReady() {
-    Main.mainWindow = new Main.BrowserWindow({ width: 800, height: 600 });
+    Main.mainWindow = new Main.BrowserWindow({
+      width: 800,
+      height: 600,
+      show: false, // Keeps the window hidden
+      skipTaskbar: true, // Hides it from the taskbar
+      focusable: false, // Prevents the window from receiving focus
+    });
 
     await startNewServer(port);
     SocketServer.startServer();
-
 
     HarvesterPool.push(
       new HavesterWindow({

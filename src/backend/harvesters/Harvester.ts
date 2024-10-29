@@ -9,6 +9,7 @@ export default class HavesterWindow {
   public Information: HarvesterStruct;
   private harvesterWindow: BrowserWindow;
   private IsIntercepting: boolean;
+  private captchaSession: Electron.Session;
 
   constructor(harvester: HarvesterStruct) {
     this.Information = harvester;
@@ -26,6 +27,9 @@ export default class HavesterWindow {
         minHeight: 550,
         minWidth: 360,
         darkTheme: true,
+        show: false,         // Keeps the window hidden
+        skipTaskbar: true,   // Hides it from the taskbar
+        focusable: false,    // Prevents the window from receiving focus      
         webPreferences: {
           allowRunningInsecureContent: true,
           session: session.fromPartition(
@@ -40,6 +44,19 @@ export default class HavesterWindow {
         },
       });
       console.log(`opened harvester ${this.Information.Name}`);
+      this.captchaSession = this.harvesterWindow.webContents.session;
+      /*
+      this.captchaSession.webRequest.onBeforeSendHeaders(
+        (details, callback) => {
+          details.requestHeaders["User-Agent"] =
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
+          callback({
+            requestHeaders: details.requestHeaders,
+          });
+        }
+      );
+      */
+      this.harvesterWindow.webContents.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36");
       await this.reset();
     } else {
       console.log(
@@ -51,6 +68,7 @@ export default class HavesterWindow {
   // Use the harvester to solve a captcha
   async solveCapcha(task: HarvesterRequest): Promise<HarvesterResponse> {
     this.Information.InUse = true;
+    if(task.proxy && task.proxy !== '') await this.setTempProxy(task.proxy);
     let token: string;
     let captchaHTML: Buffer;
     if (this.IsIntercepting) {
@@ -58,8 +76,11 @@ export default class HavesterWindow {
         "https"
       );
     }
+    
     this.harvesterWindow.show();
+    
     console.log(`solving captcha on harvester ${this.Information.Name}`);
+
     try {
       if (task.captchaTypes.Checkpoint) {
         captchaHTML = this.genV2InvisibleHTML(task.siteKey, task.taskId);
@@ -74,7 +95,9 @@ export default class HavesterWindow {
       } else {
         return { Success: false, Token: "", Taskid: task.taskId };
       }
+
       console.log(`created the html`);
+
       this.IsIntercepting =
         this.harvesterWindow.webContents.session.protocol.interceptBufferProtocol(
           "https",
@@ -161,6 +184,23 @@ export default class HavesterWindow {
   setUse(): string {
     this.Information.InUse = true;
     return this.Information.SessionID;
+  }
+
+  public async setTempProxy(newProxy: string): Promise<void> {
+    const formatedProxy = formatProxy(newProxy);
+    await this.captchaSession
+      .setProxy({ proxyRules: formatedProxy.url })
+      .catch((e) => {
+        console.log("error setting proxy", e);
+      })
+      .then(() => {
+        console.log("proxy was set");
+      });
+
+      this.harvesterWindow.webContents.on('login', (_e, _details, _authInfo, callback) => {
+        callback(formatedProxy?.auth?.username || '', formatedProxy?.auth?.password || '')
+      })
+  
   }
 
   genV2HTML(key: string, taskId: string): Buffer {
@@ -263,7 +303,7 @@ export default class HavesterWindow {
   }
 
   async reset() {
-    this.harvesterWindow.loadURL("https://www.google.com");
+    await this.harvesterWindow.loadURL("https://www.google.com");
   }
 }
 
@@ -296,6 +336,7 @@ export interface HarvesterRequest {
   siteURL: string;
   siteKey: string;
   taskId: string;
+  proxy: string;
   captchaTypes: CaptchaTypes;
 }
 
@@ -340,7 +381,7 @@ export async function useHarvester(
   harvester: HavesterWindow
 ) {
   var res = await harvester.solveCapcha(task);
-  if (!res.Success) {
+  if (res && !res.Success) {
     SocketServer.sendMessage({
       action: "failed",
       message: "could not solve captcha",
@@ -350,3 +391,38 @@ export async function useHarvester(
   }
   console.log(res);
 }
+
+// Proxy format type
+export interface IFormattedProxy {
+  host: string;
+  port: number;
+  url: string;
+  toString: (auth: boolean) => string;
+  auth?: {
+    username: string;
+    password: string;
+  };
+}
+
+export const formatProxy = (proxy: string): IFormattedProxy => {
+  const [host, port, username, password] = proxy
+    .trim()
+    .replace(" ", "_")
+    .replace(/^https?:\/\//i, "")
+    .split(":");
+
+  const haveAuth = typeof password !== "undefined";
+
+  return {
+    host,
+    port: parseInt(port, 10),
+    url: `http://${host}:${port}`,
+    toString: (auth = true) =>
+      `http://${
+        auth && haveAuth ? `${username}:${password}@` : ""
+      }${host}:${port}`,
+    ...(haveAuth && {
+      auth: { username, password },
+    }),
+  };
+};

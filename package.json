@@ -6,7 +6,7 @@
   "scripts": {
     "build": "./node_modules/.bin/tsc",
     "start": "electron dist/app.js",
-    "test": "npm run build && electron dist/app.js"
+    "test": "npm run build && npm run start"
   },
   "repository": {
     "type": "git",
@@ -25,25 +25,27 @@
   },
   "homepage": "https://github.com/KakashiHatake324/os-harvester#readme",
   "devDependencies": {
-    "@babel/core": "^7.19.3",
-    "@babel/preset-react": "^7.18.6",
-    "@types/electron": "^1.6.10",
-    "@types/koa": "^2.13.5",
-    "@types/react": "^18.0.21",
-    "@types/react-dom": "^18.0.6",
-    "@types/response-time": "^2.3.5",
-    "@types/workerpool": "^6.1.0",
-    "@types/ws": "^8.5.3",
-    "babel-loader": "^8.2.5",
-    "typescript": "^4.8.4"
+    "@babel/core": "^7.26.0",
+    "@babel/preset-react": "^7.25.9",
+    "@types/electron": "^1.6.12",
+    "@types/koa": "^2.15.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/response-time": "^2.3.8",
+    "@types/workerpool": "^6.4.7",
+    "@types/ws": "^8.5.12",
+    "babel-loader": "^8.4.1",
+    "typescript": "^4.9.5"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "koa": "^2.13.4",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "response-time": "^2.3.2",
-    "workerpool": "^6.2.1",
-    "ws": "^8.9.0"
+    "electron": "^33.0.2",
+    "express": "^4.21.1",
+    "koa": "^2.15.3",
+    "nodemon": "^3.1.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "response-time": "^2.3.3",
+    "workerpool": "^6.5.1",
+    "ws": "^8.18.0"
   }
 }
