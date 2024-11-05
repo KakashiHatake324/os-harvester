@@ -1,9 +1,13 @@
 import { BrowserWindow, ipcMain } from "electron";
 import HavesterWindow, {
   HarvesterPool,
-  SolvedCaptchas,
 } from "./backend/harvesters/Harvester";
 import { SocketServer, startNewServer } from "./backend/server/Websockets";
+import { logger } from "./utils/logger";
+
+process.on('unhandledRejection', (reason, _promise) => {
+  logger.error(`Unhandled Rejection: ${reason}`);
+});
 
 // #TODO change the port number of the websocket to your desired port
 let port: number = 2222;
@@ -79,6 +83,8 @@ export default class Main {
       harvester.openHarvester();
     });
 
+    logger.info(`[MAIN] Total of ${HarvesterPool.length} harvester workers open.`)
+
     Main.mainWindow.on("closed", Main.onClose);
   }
 
@@ -91,16 +97,6 @@ export default class Main {
     Main.application = app;
     Main.application.on("window-all-closed", Main.onWindowAllClosed);
     Main.application.on("ready", Main.onReady);
+    
   }
 }
-
-ipcMain.on("sendCaptcha", function (_event, token, taskid) {
-  console.log(`received token for ${taskid}`);
-  SolvedCaptchas.set(taskid, token);
-  SocketServer.sendMessage({
-    action: "completed",
-    message: "completed a captcha",
-    solved: { Success: true, Token: token, Taskid: taskid },
-    openHarvesters: [],
-  });
-});

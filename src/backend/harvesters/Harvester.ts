@@ -1,6 +1,7 @@
 import { BrowserWindow, net, session } from "electron";
 import { readFileSync } from "fs";
 import { SocketServer } from "../server/Websockets";
+import { logger } from "../../utils/logger";
 export var HarvesterPool: HavesterWindow[] = [];
 export let SolvedCaptchas = new Map<string, string>();
 
@@ -10,6 +11,7 @@ export default class HavesterWindow {
   private harvesterWindow: BrowserWindow;
   private IsIntercepting: boolean;
   private captchaSession: Electron.Session;
+  private formatedProxy: IFormattedProxy;
 
   constructor(harvester: HarvesterStruct) {
     this.Information = harvester;
@@ -27,9 +29,9 @@ export default class HavesterWindow {
         minHeight: 550,
         minWidth: 360,
         darkTheme: true,
-        show: false,         // Keeps the window hidden
-        skipTaskbar: true,   // Hides it from the taskbar
-        focusable: false,    // Prevents the window from receiving focus      
+        show: false,
+        skipTaskbar: true,
+        focusable: false,
         webPreferences: {
           allowRunningInsecureContent: true,
           session: session.fromPartition(
@@ -43,32 +45,31 @@ export default class HavesterWindow {
           plugins: true,
         },
       });
-      console.log(`opened harvester ${this.Information.Name}`);
+      logger.info(`[${this.Information.Name}] Harvester opened.`);
       this.captchaSession = this.harvesterWindow.webContents.session;
-      /*
-      this.captchaSession.webRequest.onBeforeSendHeaders(
-        (details, callback) => {
-          details.requestHeaders["User-Agent"] =
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
-          callback({
-            requestHeaders: details.requestHeaders,
-          });
+      this.harvesterWindow.webContents.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+      );
+      this.harvesterWindow.webContents.on(
+        "login",
+        (_e, _details, _authInfo, callback) => {
+          callback(
+            this.formatedProxy?.auth?.username || "",
+            this.formatedProxy?.auth?.password || ""
+          );
         }
       );
-      */
-      this.harvesterWindow.webContents.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36");
       await this.reset();
     } else {
-      console.log(
-        `This harvester is already open bruh: ${this.Information.Name}`
-      );
+      logger.warn(`[${this.Information.Name}] This harvester is already open.`);
     }
   }
 
   // Use the harvester to solve a captcha
   async solveCapcha(task: HarvesterRequest): Promise<HarvesterResponse> {
     this.Information.InUse = true;
-    if(task.proxy && task.proxy !== '') await this.setTempProxy(task.proxy);
+    if (task.proxy && task.proxy !== "") await this.setTempProxy(task.proxy);
+    let taskType: string;
     let token: string;
     let captchaHTML: Buffer;
     if (this.IsIntercepting) {
@@ -76,34 +77,43 @@ export default class HavesterWindow {
         "https"
       );
     }
-    
+
     this.harvesterWindow.show();
-    
-    console.log(`solving captcha on harvester ${this.Information.Name}`);
+
+    logger.info(
+      `[${task.taskId}] solving captcha on harvester ${this.Information.Name}`
+    );
 
     try {
       if (task.captchaTypes.Checkpoint) {
         captchaHTML = this.genV2InvisibleHTML(task.siteKey, task.taskId);
+        taskType = "CHECKPOINT";
       } else if (task.captchaTypes.V2) {
         captchaHTML = this.genV2HTML(task.siteKey, task.taskId);
+        taskType = "V2";
       } else if (task.captchaTypes.V2Invisible) {
         captchaHTML = this.genV2InvisibleHTML(task.siteKey, task.taskId);
+        taskType = "V2INVISIBLE";
       } else if (task.captchaTypes.V3) {
         captchaHTML = this.genV2InvisibleHTML(task.siteKey, task.taskId);
+        taskType = "V3";
       } else if (task.captchaTypes.V3Enterprise) {
         captchaHTML = this.genV2InvisibleHTML(task.siteKey, task.taskId);
+        taskType = "V3ENTERPRISE";
       } else {
         return { Success: false, Token: "", Taskid: task.taskId };
       }
 
-      console.log(`created the html`);
+      logger.info(`[${task.taskId}] (${taskType}) created the html`);
 
       this.IsIntercepting =
         this.harvesterWindow.webContents.session.protocol.interceptBufferProtocol(
           "https",
           (request, callback) => {
             if (request.url === task.siteURL) {
-              console.log("injecting that mf", request.url);
+              logger.info(
+                `[${task.taskId}] (${taskType}) injecting the html ${request.url}`
+              );
               this.harvesterWindow.webContents.session.protocol.uninterceptProtocol(
                 "https"
               );
@@ -137,21 +147,50 @@ export default class HavesterWindow {
           }
         );
 
-      console.log(`setting up the intercept`);
+      logger.info(`[${task.taskId}] (${taskType}) setting up the intercept`);
 
-      await this.harvesterWindow.loadURL(task.siteURL);
+      await this.harvesterWindow
+        .loadURL(task.siteURL)
+        .catch((e) => {
+          logger.error(
+            `[${task.taskId}] (${taskType}) error loading the url: ${e}`
+          );
+          throw e;
+        })
+        .then(() => {
+          logger.info(`[${task.taskId}] (${taskType}) loaded the url`);
+        });
 
       while (this.IsIntercepting) {
-        let complete = await this.checkComplete(task.taskId);
-        if (complete) {
-          token = SolvedCaptchas.get(task.taskId);
-          SolvedCaptchas.delete(task.taskId);
+        try {
+          token = await this.getToken();
+        } catch (e) {
+          logger.error(
+            `[${task.taskId}] (${taskType}) error getting token ${e}`
+          );
+          throw e;
+        }
+        if (!(await this.stringEmpty(token))) {
+          logger.info(
+            `[${task.taskId}] (${taskType}) completed captcha successefully, TOKEN: ${token}`
+          );
+          this.sendToken(token, task.taskId);
           break;
         }
-        await delay(3000);
+        await delay(500);
       }
     } catch (e) {
-      console.log(`error solving the captcha ${e}`);
+      logger.info(
+        `[${task.taskId}] (${taskType}) error solving the captcha ${e}`
+      );
+      if (!token) {
+        SocketServer.sendMessage({
+          action: "failed",
+          message: "could not solve captcha",
+          solved: { Success: false, Token: "", Taskid: task.taskId },
+          openHarvesters: [],
+        });
+      }
     } finally {
       this.Information.InUse = false;
       this.IsIntercepting = false;
@@ -159,11 +198,6 @@ export default class HavesterWindow {
         "https"
       );
       await this.reset();
-      if (!token) {
-        return { Success: false, Token: "", Taskid: task.taskId };
-      } else {
-        return null;
-      }
     }
   }
 
@@ -187,20 +221,15 @@ export default class HavesterWindow {
   }
 
   public async setTempProxy(newProxy: string): Promise<void> {
-    const formatedProxy = formatProxy(newProxy);
+    this.formatedProxy = formatProxy(newProxy);
     await this.captchaSession
-      .setProxy({ proxyRules: formatedProxy.url })
+      .setProxy({ proxyRules: this.formatedProxy.url })
       .catch((e) => {
-        console.log("error setting proxy", e);
+        logger.error("error setting proxy", e);
       })
       .then(() => {
-        console.log("proxy was set");
+        logger.info("proxy was set");
       });
-
-      this.harvesterWindow.webContents.on('login', (_e, _details, _authInfo, callback) => {
-        callback(formatedProxy?.auth?.username || '', formatedProxy?.auth?.password || '')
-      })
-  
   }
 
   genV2HTML(key: string, taskId: string): Buffer {
@@ -210,15 +239,6 @@ export default class HavesterWindow {
         <head>
         <title>Recaptcha Harvester</title>
         <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-          <script>
-            window.captcha = "";
-            function captchaCallback(token) {
-                window.captcha = token;
-                console.log(token);
-                sub(token);
-              window.grecaptcha.reset();
-            }
-          </script>
           <style>
             .flex {
               display: flex;
@@ -236,13 +256,12 @@ export default class HavesterWindow {
         </head>
         <body>
             <div class="flex justify-center items-center mt-6">
-            <div class="g-recaptcha" data-sitekey="${key}" data-callback="captchaCallback"></div>
+            <div class="g-recaptcha" data-sitekey="${key}"></div>
             </div>
             <script>
-            const {ipcRenderer} = require('electron')
-            function sub(token) {
-            ipcRenderer.send('sendCaptcha', token, '${taskId}');
-            }
+            window.addEventListener('load', function () {
+                grecaptcha.execute();
+            })
             </script>
           </body>
         </html>
@@ -256,15 +275,6 @@ export default class HavesterWindow {
         <head>
         <title>Recaptcha Harvester</title>
         <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-          <script>
-            window.captcha = "";
-            function captchaCallback(token) {
-                window.captcha = token;
-                console.log(token);
-                sub(token);
-              window.grecaptcha.reset();
-            }
-          </script>
           <style>
             .flex {
               display: flex;
@@ -282,13 +292,9 @@ export default class HavesterWindow {
         </head>
         <body>
             <div class="flex justify-center items-center mt-6">
-            <div class="g-recaptcha" data-sitekey="${key}" data-callback="captchaCallback" data-size="invisible"></div>
+            <div class="g-recaptcha" data-sitekey="${key}" data-size="invisible"></div>
             </div>
             <script>
-            const {ipcRenderer} = require('electron')
-            function sub(token) {
-            ipcRenderer.send('sendCaptcha', token, '${taskId}');
-            }
             window.addEventListener('load', function () {
                 grecaptcha.execute();
             })
@@ -298,12 +304,34 @@ export default class HavesterWindow {
         `);
   }
 
-  async checkComplete(taskId: string): Promise<boolean> {
-    return SolvedCaptchas.has(taskId);
+  private async getToken(): Promise<string> {
+    return await this.harvesterWindow.webContents
+      .executeJavaScript(`grecaptcha.getResponse()`)
+      .catch((r) => {
+        logger.error("error getting token", r);
+      });
+  }
+
+  private sendToken(token: string, taskId: string) {
+    SocketServer.sendMessage({
+      action: "completed",
+      message: "completed a captcha",
+      solved: { Success: true, Token: token, Taskid: taskId },
+      openHarvesters: [],
+    });
+  }
+
+  private async stringEmpty(check: any): Promise<boolean> {
+    if (check === undefined || check === "" || check === "undefined") {
+      return true;
+    } else {
+      return false;
+    }
   }
 
   async reset() {
     await this.harvesterWindow.loadURL("https://www.google.com");
+    this.Information.InUse = false;
   }
 }
 
@@ -353,26 +381,26 @@ export function delay(ms: number) {
 }
 
 export async function solveCaptcha(request: HarvesterRequest) {
-  let harvester: HavesterWindow = await locateOpenHarvester();
-
-  while (harvester === null) {
-    harvester = await locateOpenHarvester();
-    await delay(500);
+  try {
+    let harvester: HavesterWindow = await locateOpenHarvester();
+    logger.info(`Found an open harvester and will use it to solve..`);
+    useHarvester(request, harvester);
+  } catch (e) {
+    console.error(`error selecting and using harvester: ${e}`);
   }
-  console.log(`Found an open harvester and will use it to solve..`);
-
-  useHarvester(request, harvester);
 }
 
 // Locate an open harvester, set it in use and return it
 export async function locateOpenHarvester(): Promise<HavesterWindow> {
-  for await (const harvester of HarvesterPool) {
-    if (!harvester.inUse()) {
-      harvester.setUse();
-      return harvester;
+  while (true) {
+    for await (const harvester of HarvesterPool) {
+      if (!harvester.inUse()) {
+        harvester.setUse();
+        return harvester;
+      }
     }
+    await delay(100);
   }
-  return null;
 }
 
 // Use the harvester returned by locateOpenHarvester()
@@ -380,16 +408,7 @@ export async function useHarvester(
   task: HarvesterRequest,
   harvester: HavesterWindow
 ) {
-  var res = await harvester.solveCapcha(task);
-  if (res && !res.Success) {
-    SocketServer.sendMessage({
-      action: "failed",
-      message: "could not solve captcha",
-      solved: res,
-      openHarvesters: [],
-    });
-  }
-  console.log(res);
+  harvester.solveCapcha(task);
 }
 
 // Proxy format type
@@ -426,3 +445,18 @@ export const formatProxy = (proxy: string): IFormattedProxy => {
     }),
   };
 };
+
+let currentTasks = 0;
+
+export async function limitedSolveCaptcha(request: HarvesterRequest) {
+  if (currentTasks >= HarvesterPool.length) {
+    await delay(100); // Short delay before retrying
+    return limitedSolveCaptcha(request);
+  }
+  currentTasks++;
+  try {
+    await solveCaptcha(request);
+  } finally {
+    currentTasks--;
+  }
+}

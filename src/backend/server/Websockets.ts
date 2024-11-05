@@ -6,8 +6,10 @@ import HavesterWindow, {
   HarvesterPool,
   HarvesterRequest,
   HarvesterResponse,
+  limitedSolveCaptcha,
   solveCaptcha,
 } from "../harvesters/Harvester";
+import { logger } from "../../utils/logger";
 export var SocketServer: WebsocketServer;
 
 export default class WebsocketServer {
@@ -23,7 +25,7 @@ export default class WebsocketServer {
     this.wss = new WebSocket.Server({ server });
 
     server.listen(port, () => {
-      console.log(
+      logger.info(
         `Server started on port ${(server.address() as AddressInfo).port} :)`
       );
     });
@@ -33,10 +35,10 @@ export default class WebsocketServer {
     this.wss.on("connection", (socket) => {
       this.socket = socket;
 
-      console.log(`connection established`);
+      logger.info(`connection established`);
       const data: ReturnMessages = {
         action: "Welcome",
-        message: "Welcome bruh",
+        message: "Welcome",
         solved: undefined,
         openHarvesters: HarvesterPool,
       };
@@ -45,12 +47,11 @@ export default class WebsocketServer {
 
       socket.on("message", (message) => {
         const data: SocketMessages = JSON.parse(message.toString());
-        console.log(message.toString());
-        console.log(`${data.action}`);
+        logger.info(`${data.solve.taskId}:${data.action}`);
 
         switch (data.action) {
           case "solve":
-            solveCaptcha(data.solve);
+            limitedSolveCaptcha(data.solve);
             break;
           default:
             break;

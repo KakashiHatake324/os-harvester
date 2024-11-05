@@ -6,7 +6,7 @@
   "scripts": {
     "build": "./node_modules/.bin/tsc",
     "start": "electron dist/app.js",
-    "test": "npm run build && npm run start"
+    "test": "pnpm run build && pnpm run start"
   },
   "repository": {
     "type": "git",
@@ -27,6 +27,8 @@
   "devDependencies": {
     "@babel/core": "^7.26.0",
     "@babel/preset-react": "^7.25.9",
+    "@types/bunyan": "^1.8.11",
+    "@types/bunyan-format": "^0.2.9",
     "@types/electron": "^1.6.12",
     "@types/koa": "^2.15.0",
     "@types/react": "^18.3.12",
@@ -38,6 +40,8 @@
     "typescript": "^4.9.5"
   },
   "dependencies": {
+    "bunyan": "^1.8.15",
+    "bunyan-format": "^0.2.1",
     "electron": "^33.0.2",
     "express": "^4.21.1",
     "koa": "^2.15.3",
